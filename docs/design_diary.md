@@ -37,3 +37,19 @@ Observed tests:
 - Observed OK responses included the correct NID:5849 suffix.
 
 Duplicate-name rejection and five simultaneous clients still need testing.
+
+## Broadcast and private messaging milestone
+Added BCAST to send a message to other registered clients.
+Added PMSG to find a registered recipient and deliver a private message.
+
+Observed tests:
+- Alice's broadcast reached Bob and Alice received OK SENT.
+- Bob's private message reached Alice and Bob received OK SENT.
+- PMSG to nobody returned ERR 002 USER_NOT_FOUND.
+- These OK and ERR replies included NID:5849.
+- The server compiled without displayed warnings or errors.
+- Earlier duplicate registration testing returned ERR 001 USERNAME_TAKEN;
+  retrying with a different username succeeded.
+
+Still to verify: private-message isolation with a third client and
+at least five simultaneous clients.

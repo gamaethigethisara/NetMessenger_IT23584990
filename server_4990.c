@@ -142,6 +142,67 @@ static void *serve_client(void *argument)
             }
         } else if (client->name[0] == '\0') {
             send_text(fd, "ERR 005 REGISTER_REQUIRED" TAG);
+
+        } else if (strncmp(line, "BCAST ", 6) == 0) {
+            const char *message = line + 6;
+
+            if (*message == '\0') {
+                send_text(fd, "ERR 005 INVALID_FORMAT" TAG);
+            } else {
+                char outgoing[LINE_SIZE + NAME_SIZE + 32];
+                snprintf(outgoing, sizeof(outgoing),
+                         "MSG BCAST %s %s\n",
+                         client->name, message);
+
+                for (int i = 0; i < MAX_CLIENTS; ++i) {
+                    if (&clients[i] != client &&
+                        clients[i].fd != -1 &&
+                        clients[i].name[0] != '\0') {
+                        send_text(clients[i].fd, outgoing);
+                    }
+                }
+                send_text(fd, "OK SENT" TAG);
+            }
+
+        } else if (strncmp(line, "PMSG ", 5) == 0) {
+            char *target = line + 5;
+            char *separator = strchr(target, ' ');
+
+            if (separator == NULL || separator == target ||
+                separator[1] == '\0') {
+                send_text(fd, "ERR 005 INVALID_FORMAT" TAG);
+            } else {
+                *separator = '\0';
+                const char *message = separator + 1;
+                Client *recipient = NULL;
+
+                if (!valid_name(target)) {
+                    send_text(fd, "ERR 005 INVALID_FORMAT" TAG);
+                } else {
+                    for (int i = 0; i < MAX_CLIENTS; ++i) {
+                        if (clients[i].fd != -1 &&
+                            clients[i].name[0] != '\0' &&
+                            strcmp(clients[i].name, target) == 0) {
+                            recipient = &clients[i];
+                            break;
+                        }
+                    }
+
+                    if (recipient == NULL) {
+                        send_text(fd, "ERR 002 USER_NOT_FOUND" TAG);
+                    } else {
+                        char outgoing[LINE_SIZE + NAME_SIZE + 32];
+                        snprintf(outgoing, sizeof(outgoing),
+                                 "MSG PRIV %s %s\n",
+                                 client->name, message);
+
+                        if (send_text(recipient->fd, outgoing) == 0)
+                            send_text(fd, "OK SENT" TAG);
+                        else
+                            send_text(fd, "ERR 007 DELIVERY_FAILED" TAG);
+                    }
+                }
+            }
         } else if (strcmp(line, "LIST") == 0) {
             char response[MAX_CLIENTS * NAME_SIZE + 64];
             strcpy(response, "OK USERS ");
