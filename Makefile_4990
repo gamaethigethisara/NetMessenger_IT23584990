@@ -1,6 +1,6 @@
 .RECIPEPREFIX := >
 CC = gcc
-CFLAGS = -std=c11 -Wall -Wextra -Wpedantic -g
+CFLAGS = -std=c11 -Wall -Wextra -Wpedantic -g -pthread
 
 .PHONY: all clean
 
