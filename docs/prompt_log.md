@@ -28,3 +28,12 @@ Applied the changes, rebuilt the server, and tested broadcast delivery,
 private-message delivery and an unknown recipient.
 Shared terminal screenshots for review; the observed results matched
 the expected responses. Three-client privacy testing remains pending.
+
+## Entry 5 - Room messaging
+Uploaded the current server source and requested room support.
+AI added JOIN, LEAVE, ROOMS, RMSG and membership cleanup, and reported
+compilation and automated checks in its own environment.
+Installed the updated source in CentOS and manually tested room joining,
+listing, message delivery, leaving and rejection after leaving.
+Shared screenshots and repeated the initial commands individually
+after input-format problems. The repeated tests matched expected results.

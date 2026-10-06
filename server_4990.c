@@ -10,6 +10,7 @@
 
 #define PORT 10990
 #define MAX_CLIENTS 32
+#define MAX_ROOMS 32
 #define NAME_SIZE 32
 #define LINE_SIZE 2048
 #define TAG " NID:5849\n"
@@ -20,6 +21,12 @@ typedef struct {
 } Client;
 
 static Client clients[MAX_CLIENTS];
+typedef struct {
+    char name[NAME_SIZE];
+    unsigned char members[MAX_CLIENTS];
+} Room;
+
+static Room rooms[MAX_ROOMS];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* Caller holds lock when accessing a client socket. */
@@ -100,6 +107,130 @@ static void notify_others(Client *sender, const char *event)
     }
 }
 
+/* Room helpers are called with the shared state lock held.
+   Empty rooms are removed; a later JOIN can recreate them. */
+static int find_room(const char *name)
+{
+    for (int i = 0; i < MAX_ROOMS; ++i)
+        if (rooms[i].name[0] != '\0' &&
+            strcmp(rooms[i].name, name) == 0)
+            return i;
+    return -1;
+}
+
+static void remove_member(int room, int member)
+{
+    rooms[room].members[member] = 0;
+    for (int i = 0; i < MAX_CLIENTS; ++i)
+        if (rooms[room].members[i])
+            return;
+    memset(&rooms[room], 0, sizeof(rooms[room]));
+}
+
+/* Return 1 when this function has handled the command. */
+static int handle_room_command(Client *client, char *line)
+{
+    int member = (int)(client - clients);
+    int fd = client->fd;
+    char response[MAX_ROOMS * NAME_SIZE + 64];
+
+    if (strcmp(line, "ROOMS") == 0) {
+        strcpy(response, "OK ROOMS ");
+        int first = 1;
+        for (int i = 0; i < MAX_ROOMS; ++i) {
+            if (rooms[i].name[0] == '\0')
+                continue;
+            if (!first)
+                strcat(response, ",");
+            strcat(response, rooms[i].name);
+            first = 0;
+        }
+        strcat(response, TAG);
+        send_text(fd, response);
+        return 1;
+    }
+
+    int joining = strncmp(line, "JOIN ", 5) == 0;
+    int leaving = strncmp(line, "LEAVE ", 6) == 0;
+    if (joining || leaving) {
+        const char *name = line + (joining ? 5 : 6);
+        if (!valid_name(name)) {
+            send_text(fd, "ERR 005 INVALID_ROOM_NAME" TAG);
+            return 1;
+        }
+        int room = find_room(name);
+        if (joining) {
+            if (room == -1) {
+                for (int i = 0; i < MAX_ROOMS; ++i) {
+                    if (rooms[i].name[0] == '\0') {
+                        room = i;
+                        memset(&rooms[i], 0, sizeof(rooms[i]));
+                        strcpy(rooms[i].name, name);
+                        break;
+                    }
+                }
+            }
+            if (room == -1) {
+                send_text(fd, "ERR 006 ROOM_LIMIT_REACHED" TAG);
+                return 1;
+            }
+            /* Repeated JOIN is harmless: membership is a flag. */
+            rooms[room].members[member] = 1;
+            snprintf(response, sizeof(response), "OK JOINED %s" TAG, name);
+        } else {
+            if (room == -1) {
+                send_text(fd, "ERR 003 ROOM_NOT_FOUND" TAG);
+                return 1;
+            }
+            if (!rooms[room].members[member]) {
+                send_text(fd, "ERR 005 NOT_IN_ROOM" TAG);
+                return 1;
+            }
+            remove_member(room, member);
+            snprintf(response, sizeof(response), "OK LEFT %s" TAG, name);
+        }
+        send_text(fd, response);
+        return 1;
+    }
+
+    if (strncmp(line, "RMSG ", 5) == 0) {
+        char *name = line + 5;
+        char *separator = strchr(name, ' ');
+        if (separator == NULL || separator == name || separator[1] == '\0') {
+            send_text(fd, "ERR 005 INVALID_FORMAT" TAG);
+            return 1;
+        }
+        *separator = '\0';
+        if (!valid_name(name)) {
+            send_text(fd, "ERR 005 INVALID_ROOM_NAME" TAG);
+            return 1;
+        }
+        int room = find_room(name);
+        if (room == -1) {
+            send_text(fd, "ERR 003 ROOM_NOT_FOUND" TAG);
+        } else if (!rooms[room].members[member]) {
+            send_text(fd, "ERR 005 NOT_IN_ROOM" TAG);
+        } else {
+            char outgoing[LINE_SIZE + 2 * NAME_SIZE + 32];
+            snprintf(outgoing, sizeof(outgoing), "MSG ROOM %s %s %s\n",
+                     name, client->name, separator + 1);
+            for (int i = 0; i < MAX_CLIENTS; ++i) {
+                if (i != member && rooms[room].members[i] &&
+                    clients[i].fd != -1 && clients[i].name[0] != '\0')
+                    send_text(clients[i].fd, outgoing);
+            }
+            send_text(fd, "OK SENT" TAG);
+        }
+        return 1;
+    }
+    if (strcmp(line, "JOIN") == 0 || strcmp(line, "LEAVE") == 0 ||
+        strcmp(line, "RMSG") == 0 || strncmp(line, "ROOMS ", 6) == 0) {
+        send_text(fd, "ERR 005 INVALID_FORMAT" TAG);
+        return 1;
+    }
+    return 0;
+}
+
 static void *serve_client(void *argument)
 {
     Client *client = argument;
@@ -143,6 +274,8 @@ static void *serve_client(void *argument)
         } else if (client->name[0] == '\0') {
             send_text(fd, "ERR 005 REGISTER_REQUIRED" TAG);
 
+        } else if (handle_room_command(client, line)) {
+            /* The room handler already sent the response. */
         } else if (strncmp(line, "BCAST ", 6) == 0) {
             const char *message = line + 6;
 
@@ -238,6 +371,9 @@ static void *serve_client(void *argument)
         printf("Disconnected: %s\n", client->name);
         fflush(stdout);
     }
+
+    for (int i = 0; i < MAX_ROOMS; ++i)
+        remove_member(i, (int)(client - clients));
 
     close(fd);
     client->fd = -1;

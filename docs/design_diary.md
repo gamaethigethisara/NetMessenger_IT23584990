@@ -53,3 +53,20 @@ Observed tests:
 
 Still to verify: private-message isolation with a third client and
 at least five simultaneous clients.
+
+## Room messaging milestone
+Implemented JOIN, LEAVE, ROOMS and RMSG with room membership flags.
+Room state is protected by the existing mutex.
+Disconnect cleanup removes memberships; empty rooms are deleted.
+
+Observed manual tests on CentOS:
+- Alice and Bob joined lab successfully.
+- ROOMS returned lab.
+- Alice received OK SENT and Bob received Alice's room message.
+- Bob received OK LEFT after leaving lab.
+- Bob's later RMSG was rejected with ERR 005 NOT_IN_ROOM.
+- An unknown room returned ERR 003 ROOM_NOT_FOUND.
+
+Initial pasted commands produced errors; repeating commands individually
+with Enter and waiting for each response completed the tests successfully.
+Room isolation and disconnect cleanup still need local evidence.
