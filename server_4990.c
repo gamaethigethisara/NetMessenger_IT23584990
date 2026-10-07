@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <stdarg.h>
+#include <time.h>
 
 #define PORT 10990
 #define MAX_CLIENTS 32
@@ -32,9 +34,45 @@ typedef struct {
 static Room rooms[MAX_ROOMS];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
+#define LOG_PATH "netmsg_IT23584990.log"
+static pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* Separate lock keeps complete log records together across client threads.
+   Control characters are escaped to keep each event on one physical line. */
+static void log_event(const char *event, int fd, const char *format, ...)
+{
+    char detail[4096], stamp[64];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(detail, sizeof(detail), format, args);
+    va_end(args);
+    pthread_mutex_lock(&log_lock);
+    time_t now = time(NULL);
+    struct tm local;
+    if (localtime_r(&now, &local) == NULL ||
+        strftime(stamp, sizeof(stamp), "%Y-%m-%dT%H:%M:%S%z", &local) == 0)
+        strcpy(stamp, "TIME_UNAVAILABLE");
+    FILE *out = fopen(LOG_PATH, "a");
+    if (out == NULL) {
+        perror("open log");
+    } else {
+        int failed = fprintf(out, "[%s] event=%s fd=%d ", stamp, event, fd) < 0;
+        for (const unsigned char *p = (const unsigned char *)detail; *p; ++p) {
+            if (*p < 32 || *p == 127) {
+                if (fprintf(out, "\\x%02X", (unsigned int)*p) < 0) failed = 1;
+            } else if (fputc(*p, out) == EOF) failed = 1;
+        }
+        if (fputc('\n', out) == EOF) failed = 1;
+        if (fclose(out) == EOF) failed = 1;
+        if (failed) fprintf(stderr, "Could not write a complete log record.\n");
+    }
+    pthread_mutex_unlock(&log_lock);
+}
+
 /* Caller holds lock when accessing a client socket. */
 static int send_text(int fd, const char *text)
 {
+    const char *original = text;
     size_t remaining = strlen(text);
 
     while (remaining > 0) {
@@ -42,12 +80,14 @@ static int send_text(int fd, const char *text)
         if (n < 0 && errno == EINTR)
             continue;
         if (n <= 0) {
+            log_event("SEND_ERROR", fd, "errno=%d", errno);
             shutdown(fd, SHUT_RDWR);
             return -1;
         }
         text += n;
         remaining -= (size_t)n;
     }
+    log_event("SENT", fd, "%s", original);
     return 0;
 }
 
@@ -311,7 +351,11 @@ static int receive_upload(Client *client, char *line)
     while (used < size) {
         ssize_t n = recv(fd, data + used, size - used, 0);
         if (n < 0 && errno == EINTR) continue;
-        if (n <= 0) { free(data); return -1; }
+        if (n <= 0) {
+            log_event("UPLOAD_INCOMPLETE", fd, "user=%s file=%s received=%zu expected=%lu errno=%d",
+                      client->name, filename, used, size, n < 0 ? errno : 0);
+            free(data); return -1;
+        }
         used += (size_t)n;
     }
     timeout.tv_sec = 0;
@@ -381,6 +425,8 @@ static int receive_upload(Client *client, char *line)
             }
         }
     }
+    if (!error) log_event("FILE_STORED", fd, "user=%s target=%s path=%s bytes=%lu",
+                          client->name, target, path, size);
     /* Serialize header + raw bytes with all other outgoing frames.
        Upload reception and disk IO above do not hold the shared mutex. */
     pthread_mutex_lock(&lock);
@@ -395,6 +441,9 @@ static int receive_upload(Client *client, char *line)
             send_text(fd, header);
         }
     }
+    log_event(error ? "FILE_FAILED" : "FILE_FORWARDED", fd,
+              "user=%s target=%s file=%s bytes=%lu recipients=%d result=%s",
+              client->name, target, filename, size, count, error ? error : "OK");
     if (error) send_text(fd, error);
     pthread_mutex_unlock(&lock);
     for (int i = 0; i < count; ++i) close(recipients[i]);
@@ -410,6 +459,8 @@ static void *serve_client(void *argument)
     int result;
 
     while ((result = read_line(fd, line, sizeof(line))) == 1) {
+        log_event("COMMAND", fd, "user=%s command=%s",
+                  client->name[0] ? client->name : "unregistered", line);
         if (strncmp(line, "SENDFILE ", 9) == 0) {
             if (receive_upload(client, line) < 0) { result = 0; break; }
             continue;
@@ -550,6 +601,8 @@ static void *serve_client(void *argument)
     for (int i = 0; i < MAX_ROOMS; ++i)
         remove_member(i, (int)(client - clients));
 
+    log_event("DISCONNECT", fd, "user=%s memberships_cleared=1",
+              client->name[0] ? client->name : "unregistered");
     close(fd);
     client->fd = -1;
     client->name[0] = '\0';
@@ -559,6 +612,9 @@ static void *serve_client(void *argument)
 
 int main(void)
 {
+    FILE *check_log = fopen(LOG_PATH, "a");
+    if (!check_log) { perror("open log"); return EXIT_FAILURE; }
+    if (fclose(check_log)) { perror("close log"); return EXIT_FAILURE; }
     for (int i = 0; i < MAX_CLIENTS; ++i)
         clients[i].fd = -1;
 
@@ -594,6 +650,7 @@ int main(void)
         return EXIT_FAILURE;
     }
 
+    log_event("START", listener, "student=IT23584990 port=%d", PORT);
     printf("NetMessenger - IT23584990\n");
     printf("Listening on 0.0.0.0:%d\n", PORT);
     fflush(stdout);
@@ -607,6 +664,7 @@ int main(void)
             break;
         }
 
+        log_event("CONNECT", fd, "accepted=1");
         struct timeval timeout = {.tv_sec = 3, .tv_usec = 0};
         if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO,
                        &timeout, sizeof(timeout)) == -1) {

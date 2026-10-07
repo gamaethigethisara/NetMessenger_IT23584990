@@ -45,3 +45,6 @@ in its own environment.
 Built both files on CentOS and manually tested private and room transfers.
 Verified the server and recipient copies using cmp and shared screenshots.
 All four local file comparisons passed.
+
+### 7. Server logging assistance — 2026-10-07
+AI assistance summary: Codex supplied a server update for timestamped event logging and commands to verify it. The update was compiled and tested on CentOS. Screenshots confirmed command/error records, a 52-byte file storage and forwarding event, and Bob's normal disconnect. This entry summarizes the assistance; the original conversation contains the full prompts and responses.
