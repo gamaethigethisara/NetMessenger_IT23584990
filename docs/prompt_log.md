@@ -51,3 +51,6 @@ AI assistance summary: Codex supplied a server update for timestamped event logg
 
 ### 8. Verification assistance — 2026-10-07
 Codex provided manual test steps for five connected clients, binary room transfer, room isolation and abrupt disconnect cleanup. It also supplied Python socket scripts for command and file framing tests. I ran these tests on CentOS and supplied screenshots of the outputs for review. Both framing scripts reported all checks passed. This is a summary; full prompts and responses are in the original conversation.
+
+### 9. Upload error test assistance — 2026-10-07
+Codex supplied tests/upload_errors_test.py to check oversized upload rejection, incomplete upload handling and server responsiveness afterward. I ran the script on CentOS; all three checks passed, and I supplied the output screenshot for review.

@@ -35,3 +35,10 @@ Ran tests/file_framing_test.py on CentOS.
 Verified split binary payload forwarding without changes, separate processing of LIST immediately after file bytes, and an identical server copy.
 An upload to a nonexistent room returned ERR 003, and the following LIST command was processed correctly.
 Result: All four checks PASS.
+
+### Upload errors and recovery — 2026-10-07
+Ran tests/upload_errors_test.py on CentOS.
+A declared size of 1048577 bytes exceeded the 1 MiB limit and returned ERR 004 FILE_TOO_LARGE, followed by connection closure.
+An upload declaring 100 bytes but sending only three before EOF was closed without saving partial.bin.
+A new client then registered, ran LIST and exited with QUIT successfully.
+Result: All three checks PASS.
