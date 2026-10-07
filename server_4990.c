@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include <arpa/inet.h>
 #include <errno.h>
 #include <pthread.h>
@@ -7,6 +8,8 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #define PORT 10990
 #define MAX_CLIENTS 32
@@ -231,6 +234,174 @@ static int handle_room_command(Client *client, char *line)
     return 0;
 }
 
+
+#define FILE_LIMIT (1024UL * 1024UL)
+
+/* File names are single safe path components, never paths. */
+static int valid_file(const char *name)
+{
+    size_t n = strlen(name);
+    if (!n || n > 127 || name[0] == '.') return 0;
+    for (size_t i = 0; i < n; ++i) {
+        char c = name[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.'))
+            return 0;
+    }
+    return 1;
+}
+
+static int ensure_directory(const char *path)
+{
+    struct stat st;
+    if (mkdir(path, 0700) == -1 && errno != EEXIST) return -1;
+    return lstat(path, &st) == 0 && S_ISDIR(st.st_mode) ? 0 : -1;
+}
+
+static int send_bytes(int fd, const void *buffer, size_t size)
+{
+    const unsigned char *p = buffer;
+    while (size) {
+        ssize_t n = send(fd, p, size, MSG_NOSIGNAL);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) { shutdown(fd, SHUT_RDWR); return -1; }
+        p += n; size -= (size_t)n;
+    }
+    return 0;
+}
+
+/* A complete frame is consumed even when its target is invalid.
+   Unbounded/ambiguous frames are rejected and the connection is closed. */
+static int receive_upload(Client *client, char *line)
+{
+    char target[64], filename[128], number[32], extra;
+    unsigned long size = 0;
+    const char *error = NULL;
+    int fd = client->fd;
+    if (sscanf(line, "SENDFILE %63s %127s %31s %c",
+               target, filename, number, &extra) != 3) {
+        pthread_mutex_lock(&lock);
+        send_text(fd, "ERR 005 INVALID_FORMAT" TAG);
+        pthread_mutex_unlock(&lock);
+        return -1;
+    }
+    for (size_t i = 0; number[i]; ++i) {
+        if (number[i] < '0' || number[i] > '9') {
+            pthread_mutex_lock(&lock);
+            send_text(fd, "ERR 005 INVALID_FORMAT" TAG);
+            pthread_mutex_unlock(&lock);
+            return -1;
+        }
+    }
+    errno = 0;
+    size = strtoul(number, NULL, 10);
+    if (errno || size > FILE_LIMIT) {
+        pthread_mutex_lock(&lock);
+        send_text(fd, "ERR 004 FILE_TOO_LARGE" TAG);
+        pthread_mutex_unlock(&lock);
+        return -1;
+    }
+    unsigned char *data = malloc(size ? size : 1);
+    if (!data) return -1;
+    struct timeval timeout = {.tv_sec = 15};
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout))) {
+        free(data); return -1;
+    }
+    size_t used = 0;
+    while (used < size) {
+        ssize_t n = recv(fd, data + used, size - used, 0);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) { free(data); return -1; }
+        used += (size_t)n;
+    }
+    timeout.tv_sec = 0;
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout))) {
+        free(data); return -1;
+    }
+
+    /* Snapshot recipients; a reused slot must not receive an old transfer. */
+    int recipients[MAX_CLIENTS], count = 0;
+    pthread_mutex_lock(&lock);
+    if (!client->name[0]) error = "ERR 005 REGISTER_REQUIRED" TAG;
+    else if (!valid_file(filename)) error = "ERR 005 INVALID_FILENAME" TAG;
+    else {
+        int room_only = target[0] == '#';
+        const char *name = target + room_only;
+        if (!valid_name(name)) error = "ERR 005 INVALID_FORMAT" TAG;
+        else {
+            if (!room_only) {
+                for (int i = 0; i < MAX_CLIENTS; ++i)
+                    if (clients[i].fd != -1 && !strcmp(clients[i].name, name)) {
+                        int copy = dup(clients[i].fd);
+                        if (copy < 0) error = "ERR 007 DELIVERY_FAILED" TAG;
+                        else recipients[count++] = copy;
+                        break;
+                    }
+            }
+            if (!count && !error) {
+                int room = find_room(name);
+                if (room < 0) error = room_only ? "ERR 003 ROOM_NOT_FOUND" TAG :
+                                                               "ERR 002 USER_NOT_FOUND" TAG;
+                else if (!rooms[room].members[client - clients])
+                    error = "ERR 005 NOT_IN_ROOM" TAG;
+                else for (int i = 0; i < MAX_CLIENTS; ++i) {
+                    if (&clients[i] != client && rooms[room].members[i] && clients[i].fd != -1) {
+                        int copy = dup(clients[i].fd);
+                        if (copy < 0) { error = "ERR 007 DELIVERY_FAILED" TAG; break; }
+                        recipients[count++] = copy;
+                    }
+                }
+            }
+        }
+    }
+    pthread_mutex_unlock(&lock);
+
+    char directory[256], path[512], temporary[512];
+    temporary[0] = '\0';
+    if (!error) {
+        snprintf(directory, sizeof(directory), "storage/IT23584990/%s", client->name);
+        snprintf(path, sizeof(path), "%s/%s", directory, filename);
+        snprintf(temporary, sizeof(temporary), "%s/.upload-XXXXXX", directory);
+        if (ensure_directory("storage") || ensure_directory("storage/IT23584990") ||
+            ensure_directory(directory)) error = "ERR 007 STORAGE_FAILED" TAG;
+        else {
+            int out = mkstemp(temporary);
+            if (out < 0) error = "ERR 007 STORAGE_FAILED" TAG;
+            else {
+                size_t written = 0;
+                while (written < size) {
+                    ssize_t n = write(out, data + written, size - written);
+                    if (n < 0 && errno == EINTR) continue;
+                    if (n <= 0) { error = "ERR 007 STORAGE_FAILED" TAG; break; }
+                    written += (size_t)n;
+                }
+                if (close(out)) error = "ERR 007 STORAGE_FAILED" TAG;
+                if (!error && rename(temporary, path)) error = "ERR 007 STORAGE_FAILED" TAG;
+                if (error) unlink(temporary);
+            }
+        }
+    }
+    /* Serialize header + raw bytes with all other outgoing frames.
+       Upload reception and disk IO above do not hold the shared mutex. */
+    pthread_mutex_lock(&lock);
+    if (!error) {
+        char header[512];
+        snprintf(header, sizeof(header), "FILE %s %s %lu\n", client->name, filename, size);
+        for (int i = 0; i < count; ++i)
+            if (send_bytes(recipients[i], header, strlen(header)) ||
+                send_bytes(recipients[i], data, size)) error = "ERR 007 DELIVERY_FAILED" TAG;
+        if (!error) {
+            snprintf(header, sizeof(header), "OK FILE_RECEIVED %s" TAG, filename);
+            send_text(fd, header);
+        }
+    }
+    if (error) send_text(fd, error);
+    pthread_mutex_unlock(&lock);
+    for (int i = 0; i < count; ++i) close(recipients[i]);
+    free(data);
+    return 0;
+}
+
 static void *serve_client(void *argument)
 {
     Client *client = argument;
@@ -239,6 +410,10 @@ static void *serve_client(void *argument)
     int result;
 
     while ((result = read_line(fd, line, sizeof(line))) == 1) {
+        if (strncmp(line, "SENDFILE ", 9) == 0) {
+            if (receive_upload(client, line) < 0) { result = 0; break; }
+            continue;
+        }
         int finished = 0;
         pthread_mutex_lock(&lock);
 

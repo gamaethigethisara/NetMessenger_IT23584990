@@ -70,3 +70,20 @@ Observed manual tests on CentOS:
 Initial pasted commands produced errors; repeating commands individually
 with Enter and waiting for each response completed the tests successfully.
 Room isolation and disconnect cleanup still need local evidence.
+
+## File transfer milestone
+Implemented SENDFILE for users and rooms with a 1 MiB file limit.
+The client calculates the byte count and sends a header followed by raw bytes.
+A receiver thread handles incoming messages and files during uploads.
+The server stores complete files under storage/IT23584990/<sender>/.
+Clients save received files under received/<recipient>/<sender>/.
+
+Observed CentOS tests:
+- Private transfer: Alice sent sample_4990.txt to Bob (52 bytes).
+- Room transfer: Alice sent room_4990.txt to #filelab (37 bytes).
+- Bob received both files.
+- cmp confirmed both server copies and both Bob copies were identical
+  to the corresponding originals.
+
+Local evidence for multiple room recipients, binary files, size-limit
+rejection and interrupted uploads remains to be collected.

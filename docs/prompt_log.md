@@ -37,3 +37,11 @@ Installed the updated source in CentOS and manually tested room joining,
 listing, message delivery, leaving and rejection after leaving.
 Shared screenshots and repeated the initial commands individually
 after input-format problems. The repeated tests matched expected results.
+
+## Entry 6 - File transfer
+Uploaded the current client source and requested SENDFILE support.
+AI provided updated C server/client files and reported automated checks
+in its own environment.
+Built both files on CentOS and manually tested private and room transfers.
+Verified the server and recipient copies using cmp and shared screenshots.
+All four local file comparisons passed.
