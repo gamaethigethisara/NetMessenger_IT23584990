@@ -1,95 +1,52 @@
-# Design Diary - IT23584990
+# Design Diary — IT23584990
 
-## 2026-10-06 - Initial TCP connection
+## 6 October 2026 — Setup and messaging
 
-Set up the project on CentOS Stream 10 using GCC, GNU Make and Git.
-Recorded the personalised TCP port 10990 and response tag NID:5849
-in the README.
+Set up the project on CentOS Stream 10 with GCC, Make and Git.
+Personalised the application with TCP port 10990 and response tag
+NID:5849. Built and tested the initial TCP connection before adding
+registration, user listing and presence notifications.
 
-Implemented an initial TCP server using socket, bind, listen and
-accept. Implemented a client using socket and connect. The server
-currently accepts each connection and closes it immediately.
+Used one pthread per client to keep each connection's command handling
+straightforward. A mutex protects shared users and rooms. Added
+broadcast and private messaging, followed by room joining, leaving,
+listing and messaging. Manual tests checked successful delivery,
+duplicate usernames, unknown recipients and room membership errors.
 
-Validation:
-- Both programs compiled without displayed warnings or errors.
-- The client connected to 127.0.0.1:10990.
-- The server displayed the accepted connection.
-- Both programs rebuilt successfully using Makefile_4990.
+## 6–7 October 2026 — File transfer and logging
 
-Added the compiled executable names to .gitignore and committed
-the source files and Makefile.
+Added binary file transfer with an explicit byte count and a 1 MiB
+limit. Newline parsing handles command headers; exact-length reads
+handle payloads. The client uses a dedicated receiver thread so it
+can receive messages and files while accepting keyboard input.
 
-Next:
-Keep connections open, implement newline-delimited command parsing,
-and support multiple clients with REGISTER, LIST and QUIT.
+Complete uploads are saved on the server and forwarded to recipients.
+Temporary files and rename avoid exposing partially written files.
+Private and room transfers were checked using cmp against the originals.
 
-## Registration and presence milestone
-Implemented one thread per client and mutex-protected shared user data.
-Added newline-delimited command reading, complete-send handling,
-REGISTER, LIST, QUIT and join/leave notifications.
-Updated the client to monitor keyboard and socket input using select.
+Added timestamped logs for connections, commands, responses, file
+storage, forwarding and disconnects. A separate mutex keeps log records
+from different threads together.
 
-Observed tests:
-- Alice and Bob remained registered simultaneously.
-- LIST returned alice,bob.
-- Alice received Bob's JOINED and LEFT notifications.
-- Bob received OK BYE NID:5849 before disconnection.
-- Observed OK responses included the correct NID:5849 suffix.
+## 7 October 2026 — Verification and review
 
-Duplicate-name rejection and five simultaneous clients still need testing.
+Verified five simultaneous clients and broadcast delivery to the other
+four users. Used ss to confirm the listening port and established
+connections. A 4096-byte binary room transfer reached Bob and Carol;
+their copies and the server copy matched the original. Nonmembers
+Dave and Erin received no file.
 
-## Broadcast and private messaging milestone
-Added BCAST to send a message to other registered clients.
-Added PMSG to find a registered recipient and deliver a private message.
+Stopped Carol abruptly, checked her removal from LIST, then reconnected
+with the same name. A room message was rejected until she rejoined,
+confirming that disconnect cleanup removed the old membership.
 
-Observed tests:
-- Alice's broadcast reached Bob and Alice received OK SENT.
-- Bob's private message reached Alice and Bob received OK SENT.
-- PMSG to nobody returned ERR 002 USER_NOT_FOUND.
-- These OK and ERR replies included NID:5849.
-- The server compiled without displayed warnings or errors.
-- Earlier duplicate registration testing returned ERR 001 USERNAME_TAKEN;
-  retrying with a different username succeeded.
+Ran three Python socket test scripts on CentOS. They passed checks for
+split and combined commands, binary payload framing, a command following
+file bytes, rejected uploads, oversized files, incomplete uploads and
+server responsiveness afterward. These scripts test the C application;
+the server and client remain implemented in C.
 
-Still to verify: private-message isolation with a third client and
-at least five simultaneous clients.
-
-## Room messaging milestone
-Implemented JOIN, LEAVE, ROOMS and RMSG with room membership flags.
-Room state is protected by the existing mutex.
-Disconnect cleanup removes memberships; empty rooms are deleted.
-
-Observed manual tests on CentOS:
-- Alice and Bob joined lab successfully.
-- ROOMS returned lab.
-- Alice received OK SENT and Bob received Alice's room message.
-- Bob received OK LEFT after leaving lab.
-- Bob's later RMSG was rejected with ERR 005 NOT_IN_ROOM.
-- An unknown room returned ERR 003 ROOM_NOT_FOUND.
-
-Initial pasted commands produced errors; repeating commands individually
-with Enter and waiting for each response completed the tests successfully.
-Room isolation and disconnect cleanup still need local evidence.
-
-## File transfer milestone
-Implemented SENDFILE for users and rooms with a 1 MiB file limit.
-The client calculates the byte count and sends a header followed by raw bytes.
-A receiver thread handles incoming messages and files during uploads.
-The server stores complete files under storage/IT23584990/<sender>/.
-Clients save received files under received/<recipient>/<sender>/.
-
-Observed CentOS tests:
-- Private transfer: Alice sent sample_4990.txt to Bob (52 bytes).
-- Room transfer: Alice sent room_4990.txt to #filelab (37 bytes).
-- Bob received both files.
-- cmp confirmed both server copies and both Bob copies were identical
-  to the corresponding originals.
-
-Local evidence for multiple room recipients, binary files, size-limit
-rejection and interrupted uploads remains to be collected.
-
-### 2026-10-07 — Timestamped server logging
-Added timestamped logging for connections, commands, responses, file storage, forwarding and disconnects. A separate mutex serializes log writes. Verified on CentOS that a 52-byte Alice-to-Bob transfer produced FILE_STORED and FILE_FORWARDED records with result=OK. Bob received the file and exited using QUIT; the server recorded DISCONNECT and notified Alice. An unknown-user private message also produced a logged ERR 002 response.
-
-### 2026-10-07 — Concurrency and cleanup verification
-Verified five connected clients and broadcast delivery to the other four clients. Captured ss evidence for port 10990 and five established connections. Tested a 4096-byte binary room transfer: server, Bob and Carol copies matched the original, while Dave and Erin received no file. Stopped Carol with Ctrl+C and verified user removal, successful re-registration and cleared room membership before rejoining.
+Updated the README to describe the completed features, build/run steps,
+tests and limits. Development changes were committed and pushed in
+stages. One remaining design limitation is that outgoing sends hold
+the shared server mutex, so a slow recipient can delay other clients.
