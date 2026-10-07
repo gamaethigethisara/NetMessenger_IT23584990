@@ -90,3 +90,6 @@ rejection and interrupted uploads remains to be collected.
 
 ### 2026-10-07 — Timestamped server logging
 Added timestamped logging for connections, commands, responses, file storage, forwarding and disconnects. A separate mutex serializes log writes. Verified on CentOS that a 52-byte Alice-to-Bob transfer produced FILE_STORED and FILE_FORWARDED records with result=OK. Bob received the file and exited using QUIT; the server recorded DISCONNECT and notified Alice. An unknown-user private message also produced a logged ERR 002 response.
+
+### 2026-10-07 — Concurrency and cleanup verification
+Verified five connected clients and broadcast delivery to the other four clients. Captured ss evidence for port 10990 and five established connections. Tested a 4096-byte binary room transfer: server, Bob and Carol copies matched the original, while Dave and Erin received no file. Stopped Carol with Ctrl+C and verified user removal, successful re-registration and cleared room membership before rejoining.
