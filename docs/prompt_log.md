@@ -48,3 +48,6 @@ All four local file comparisons passed.
 
 ### 7. Server logging assistance — 2026-10-07
 AI assistance summary: Codex supplied a server update for timestamped event logging and commands to verify it. The update was compiled and tested on CentOS. Screenshots confirmed command/error records, a 52-byte file storage and forwarding event, and Bob's normal disconnect. This entry summarizes the assistance; the original conversation contains the full prompts and responses.
+
+### 8. Verification assistance — 2026-10-07
+Codex provided manual test steps for five connected clients, binary room transfer, room isolation and abrupt disconnect cleanup. It also supplied Python socket scripts for command and file framing tests. I ran these tests on CentOS and supplied screenshots of the outputs for review. Both framing scripts reported all checks passed. This is a summary; full prompts and responses are in the original conversation.

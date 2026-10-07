@@ -24,3 +24,14 @@ Alice received MSG INFO carol LEFT, and LIST showed only alice,bob,dave,erin.
 Carol reconnected and registered successfully. RMSG binarylab returned ERR 005 NOT_IN_ROOM, confirming that the old membership was removed.
 After JOIN binarylab, Carol's room message reached Alice and Bob. Dave and Erin received presence notifications but no room message.
 Result: PASS.
+
+### TCP command framing — 2026-10-07
+Ran tests/tcp_framing_test.py on CentOS.
+Verified split REGISTER, combined LIST and ROOMS, preservation of an incomplete next command, and QUIT followed by connection closure.
+Result: All four checks PASS.
+
+### File framing — 2026-10-07
+Ran tests/file_framing_test.py on CentOS.
+Verified split binary payload forwarding without changes, separate processing of LIST immediately after file bytes, and an identical server copy.
+An upload to a nonexistent room returned ERR 003, and the following LIST command was processed correctly.
+Result: All four checks PASS.
