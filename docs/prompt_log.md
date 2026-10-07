@@ -21,6 +21,18 @@ It does not yet implement chat commands or concurrent client sessions.
 These entries summarise the interaction. Preserve the original
 conversation as the detailed prompt and response record.
 
+## Entry 3 - Registration and presence
+Tool: ChatGPT / Codex
+Retrospective assistance summary, not a verbatim prompt.
+AI supplied the concurrent registration and presence implementation,
+including per-client threads, shared-state locking, newline-delimited
+commands, complete-send handling, REGISTER, LIST and QUIT.
+I compiled and ran the programs on CentOS and supplied screenshots.
+Tests showed simultaneous registered users, user listing, join/leave
+notifications, duplicate-name rejection and graceful QUIT responses.
+The early select-based client was later replaced by the file-transfer
+client with a dedicated receiver thread and poll-based input handling.
+
 ## Entry 4 - Broadcast and private messaging
 Requested the next implementation step after registration and listing.
 AI supplied BCAST and PMSG handlers and manual two-client test instructions.
@@ -54,3 +66,20 @@ Codex provided manual test steps for five connected clients, binary room transfe
 
 ### 9. Upload error test assistance — 2026-10-07
 Codex supplied tests/upload_errors_test.py to check oversized upload rejection, incomplete upload handling and server responsiveness afterward. I ran the script on CentOS; all three checks passed, and I supplied the output screenshot for review.
+
+## Entry 10 - Code review and documentation — 2026-10-07
+Tool: ChatGPT / Codex
+I uploaded NetMessenger_IT23584990_review.zip for review.
+Codex inspected the C sources, Makefile, tests and documentation.
+It reported a warning-free build and successful execution of the
+three supplied test scripts in its own environment. These checks
+were separate from my earlier CentOS test runs.
+
+Codex supplied an updated README covering implemented features,
+build/run instructions, protocol framing, storage, tests and limits.
+It also supplied a consolidated design diary based on the recorded
+development milestones and observed tests. I applied the documentation
+updates and pushed them to GitHub.
+
+This entry and the registration entry are summaries of assistance,
+not verbatim transcripts of the original prompts and responses.
