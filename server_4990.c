@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <time.h>
+#include <limits.h>
 
 #define PORT 10990
 #define MAX_CLIENTS 32
@@ -23,9 +24,13 @@
 typedef struct {
     int fd;
     char name[NAME_SIZE];
+    unsigned long long session;
+    int receipt_capable;
 } Client;
 
 static Client clients[MAX_CLIENTS];
+static unsigned long long next_session = 1;
+
 typedef struct {
     char name[NAME_SIZE];
     unsigned char members[MAX_CLIENTS];
@@ -89,6 +94,201 @@ static int send_text(int fd, const char *text)
     }
     log_event("SENT", fd, "%s", original);
     return 0;
+}
+
+/* Optional FILE_ACK extension. All records and session lookups use lock.
+   IDs are unique within this server run; no IDs are reused on overflow. */
+#define MAX_TRANSFERS 64
+#ifndef ACK_TIMEOUT_SECONDS
+#define ACK_TIMEOUT_SECONDS 30
+#endif
+#if ACK_TIMEOUT_SECONDS < 1
+#error ACK_TIMEOUT_SECONDS must be positive
+#endif
+
+typedef enum {
+    RECEIPT_PENDING, RECEIPT_SAVED, RECEIPT_SAVE_FAILED,
+    RECEIPT_DISCONNECTED, RECEIPT_DELIVERY_FAILED,
+    RECEIPT_UNSUPPORTED, RECEIPT_TIMEOUT
+} ReceiptStatus;
+
+typedef struct {
+    unsigned long long session;
+    char name[NAME_SIZE];
+    int capable, reported;
+    ReceiptStatus status;
+    struct timespec deadline;
+} Receipt;
+
+typedef struct {
+    int active, ready, count;
+    unsigned long long id, sender_session;
+    char sender[NAME_SIZE], filename[128];
+    Receipt recipients[MAX_CLIENTS];
+} Transfer;
+
+static Transfer transfers[MAX_TRANSFERS];
+static unsigned long long next_transfer = 1;
+
+static Client *find_session(unsigned long long session)
+{
+    for (int i = 0; i < MAX_CLIENTS; ++i)
+        if (clients[i].fd != -1 && clients[i].session == session)
+            return &clients[i];
+    return NULL;
+}
+
+static const char *receipt_status(ReceiptStatus status)
+{
+    static const char *names[] = {
+        "PENDING", "SAVED", "SAVE_FAILED", "DISCONNECTED",
+        "DELIVERY_FAILED", "UNSUPPORTED", "TIMEOUT"
+    };
+    return names[status];
+}
+
+static int expired(const struct timespec *deadline, const struct timespec *now)
+{
+    return now->tv_sec > deadline->tv_sec ||
+           (now->tv_sec == deadline->tv_sec && now->tv_nsec >= deadline->tv_nsec);
+}
+
+/* Report each terminal result once, then release the bounded tracking slot.
+   TIMEOUT/DISCONNECTED/UNSUPPORTED mean unknown, never proof of failed save. */
+static void publish_receipts(Transfer *transfer)
+{
+    if (!transfer->active || !transfer->ready) return;
+    Client *sender = find_session(transfer->sender_session);
+    if (!sender) { transfer->active = 0; return; }
+    char text[512];
+    int pending = 0, saved = 0, failed = 0, unknown = 0;
+    for (int i = 0; i < transfer->count; ++i) {
+        Receipt *receipt = &transfer->recipients[i];
+        if (receipt->status == RECEIPT_PENDING) { ++pending; continue; }
+        if (receipt->status == RECEIPT_SAVED) ++saved;
+        else if (receipt->status == RECEIPT_SAVE_FAILED ||
+                 receipt->status == RECEIPT_DELIVERY_FAILED) ++failed;
+        else ++unknown;
+        if (!receipt->reported) {
+            receipt->reported = 1;
+            snprintf(text, sizeof(text), "MSG FILE_RECEIPT %llu %s %s" TAG,
+                     transfer->id, receipt->name, receipt_status(receipt->status));
+            send_text(sender->fd, text);
+            log_event("FILE_RECEIPT", sender->fd, "id=%llu sender=%s recipient=%s status=%s",
+                      transfer->id, transfer->sender, receipt->name,
+                      receipt_status(receipt->status));
+        }
+    }
+    if (!pending) {
+        snprintf(text, sizeof(text),
+                 "MSG FILE_COMPLETE %llu saved=%d failed=%d unknown=%d" TAG,
+                 transfer->id, saved, failed, unknown);
+        send_text(sender->fd, text);
+        log_event("FILE_COMPLETE", sender->fd,
+                  "id=%llu saved=%d failed=%d unknown=%d", transfer->id, saved, failed, unknown);
+        transfer->active = 0;
+    }
+}
+
+static void expire_receipts(void)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now)) return;
+    for (int i = 0; i < MAX_TRANSFERS; ++i) {
+        Transfer *transfer = &transfers[i];
+        if (!transfer->active || !transfer->ready) continue;
+        for (int j = 0; j < transfer->count; ++j) {
+            Receipt *receipt = &transfer->recipients[j];
+            if (receipt->status == RECEIPT_PENDING && expired(&receipt->deadline, &now))
+                receipt->status = RECEIPT_TIMEOUT;
+        }
+        publish_receipts(transfer);
+    }
+}
+
+static void *receipt_timer(void *unused)
+{
+    (void)unused;
+    for (;;) {
+        struct timespec delay = {.tv_sec = 0, .tv_nsec = 200000000L};
+        while (nanosleep(&delay, &delay) && errno == EINTR) {}
+        pthread_mutex_lock(&lock);
+        expire_receipts();
+        pthread_mutex_unlock(&lock);
+    }
+    return NULL;
+}
+
+static Transfer *reserve_transfer(Client *sender, const char *filename)
+{
+    expire_receipts();
+    if (!next_transfer) return NULL;
+    for (int i = 0; i < MAX_TRANSFERS; ++i) {
+        if (transfers[i].active) continue;
+        Transfer *transfer = &transfers[i];
+        memset(transfer, 0, sizeof(*transfer));
+        transfer->active = 1;
+        transfer->id = next_transfer++;
+        transfer->sender_session = sender->session;
+        strcpy(transfer->sender, sender->name);
+        strcpy(transfer->filename, filename);
+        return transfer;
+    }
+    return NULL;
+}
+
+static int parse_id(const char *text, unsigned long long *id)
+{
+    if (!*text) return 0;
+    for (const char *p = text; *p; ++p) if (*p < '0' || *p > '9') return 0;
+    errno = 0;
+    *id = strtoull(text, NULL, 10);
+    return !errno && *id != 0;
+}
+
+/* Only the original recipient connection can acknowledge a pending transfer. */
+static void handle_file_ack(Client *client, const char *line)
+{
+    char number[32], status[32], extra;
+    unsigned long long id;
+    if (!client->receipt_capable ||
+        sscanf(line, "FILEACK %31s %31s %c", number, status, &extra) != 2 ||
+        !parse_id(number, &id) || (strcmp(status, "SAVED") && strcmp(status, "SAVE_FAILED"))) {
+        send_text(client->fd, "ERR 005 INVALID_FILE_ACK" TAG); return;
+    }
+    expire_receipts();
+    for (int i = 0; i < MAX_TRANSFERS; ++i) {
+        Transfer *transfer = &transfers[i];
+        if (!transfer->active || !transfer->ready || transfer->id != id) continue;
+        for (int j = 0; j < transfer->count; ++j) {
+            Receipt *receipt = &transfer->recipients[j];
+            if (receipt->session != client->session || !receipt->capable ||
+                receipt->status != RECEIPT_PENDING) continue;
+            receipt->status = !strcmp(status, "SAVED") ? RECEIPT_SAVED : RECEIPT_SAVE_FAILED;
+            publish_receipts(transfer);
+            return;
+        }
+    }
+    send_text(client->fd, "ERR 005 INVALID_FILE_ACK" TAG);
+}
+
+static void disconnect_receipts(Client *client)
+{
+    for (int i = 0; i < MAX_TRANSFERS; ++i) {
+        Transfer *transfer = &transfers[i];
+        if (!transfer->active || !transfer->ready) continue;
+        if (transfer->sender_session == client->session) {
+            log_event("FILE_TRACKING_CANCELLED", client->fd,
+                      "id=%llu reason=SENDER_DISCONNECTED", transfer->id);
+            transfer->active = 0; continue;
+        }
+        for (int j = 0; j < transfer->count; ++j) {
+            Receipt *receipt = &transfer->recipients[j];
+            if (receipt->session == client->session && receipt->status == RECEIPT_PENDING)
+                receipt->status = RECEIPT_DISCONNECTED;
+        }
+        publish_receipts(transfer);
+    }
 }
 
 /* Read exactly one newline-delimited command.
@@ -365,6 +565,8 @@ static int receive_upload(Client *client, char *line)
 
     /* Snapshot recipients; a reused slot must not receive an old transfer. */
     int recipients[MAX_CLIENTS], count = 0;
+    Receipt snapshots[MAX_CLIENTS] = {0};
+    Transfer *transfer = NULL;
     pthread_mutex_lock(&lock);
     if (!client->name[0]) error = "ERR 005 REGISTER_REQUIRED" TAG;
     else if (!valid_file(filename)) error = "ERR 005 INVALID_FILENAME" TAG;
@@ -378,7 +580,13 @@ static int receive_upload(Client *client, char *line)
                     if (clients[i].fd != -1 && !strcmp(clients[i].name, name)) {
                         int copy = dup(clients[i].fd);
                         if (copy < 0) error = "ERR 007 DELIVERY_FAILED" TAG;
-                        else recipients[count++] = copy;
+                        else {
+                            recipients[count] = copy;
+                            snapshots[count].session = clients[i].session;
+                            snapshots[count].capable = clients[i].receipt_capable;
+                            strcpy(snapshots[count].name, clients[i].name);
+                            ++count;
+                        }
                         break;
                     }
             }
@@ -392,10 +600,22 @@ static int receive_upload(Client *client, char *line)
                     if (&clients[i] != client && rooms[room].members[i] && clients[i].fd != -1) {
                         int copy = dup(clients[i].fd);
                         if (copy < 0) { error = "ERR 007 DELIVERY_FAILED" TAG; break; }
-                        recipients[count++] = copy;
+                        recipients[count] = copy;
+                        snapshots[count].session = clients[i].session;
+                        snapshots[count].capable = clients[i].receipt_capable;
+                        strcpy(snapshots[count].name, clients[i].name);
+                        ++count;
                     }
                 }
             }
+        }
+    }
+    if (!error && client->receipt_capable) {
+        transfer = reserve_transfer(client, filename);
+        if (!transfer) error = "ERR 006 RECEIPT_LIMIT_REACHED" TAG;
+        else {
+            transfer->count = count;
+            memcpy(transfer->recipients, snapshots, (size_t)count * sizeof(Receipt));
         }
     }
     pthread_mutex_unlock(&lock);
@@ -432,14 +652,56 @@ static int receive_upload(Client *client, char *line)
     pthread_mutex_lock(&lock);
     if (!error) {
         char header[512];
-        snprintf(header, sizeof(header), "FILE %s %s %lu\n", client->name, filename, size);
-        for (int i = 0; i < count; ++i)
-            if (send_bytes(recipients[i], header, strlen(header)) ||
-                send_bytes(recipients[i], data, size)) error = "ERR 007 DELIVERY_FAILED" TAG;
+        if (transfer) {
+            snprintf(header, sizeof(header), "OK FILE_TRANSFER %llu %s recipients=%d" TAG,
+                     transfer->id, filename, count);
+            send_text(fd, header);
+        }
+        for (int i = 0; i < count; ++i) {
+            Receipt *receipt = transfer ? &transfer->recipients[i] : NULL;
+            int delivery_failed = 0;
+            if (receipt && !find_session(receipt->session)) {
+                receipt->status = RECEIPT_DISCONNECTED;
+                error = "ERR 007 DELIVERY_FAILED" TAG;
+                continue;
+            }
+            if (receipt && receipt->capable) {
+                /* This metadata and the original FILE frame are serialized together. */
+                snprintf(header, sizeof(header), "FILEID %llu\n", transfer->id);
+                delivery_failed = send_bytes(recipients[i], header, strlen(header));
+            }
+            snprintf(header, sizeof(header), "FILE %s %s %lu\n", client->name, filename, size);
+            if (!delivery_failed)
+                delivery_failed = send_bytes(recipients[i], header, strlen(header)) ||
+                                  send_bytes(recipients[i], data, size);
+            if (delivery_failed) error = "ERR 007 DELIVERY_FAILED" TAG;
+            if (receipt) {
+                if (delivery_failed) receipt->status = RECEIPT_DELIVERY_FAILED;
+                else if (!receipt->capable) receipt->status = RECEIPT_UNSUPPORTED;
+            }
+        }
         if (!error) {
             snprintf(header, sizeof(header), "OK FILE_RECEIVED %s" TAG, filename);
             send_text(fd, header);
         }
+        if (transfer) {
+            /* ACK handlers cannot acquire lock during room forwarding. Start
+               the waiting interval after that batch, not before a slow peer. */
+            struct timespec deadline;
+            int clock_failed = clock_gettime(CLOCK_MONOTONIC, &deadline);
+            if (!clock_failed) deadline.tv_sec += ACK_TIMEOUT_SECONDS;
+            for (int i = 0; i < count; ++i) {
+                Receipt *receipt = &transfer->recipients[i];
+                if (receipt->status != RECEIPT_PENDING) continue;
+                if (clock_failed) receipt->status = RECEIPT_TIMEOUT;
+                else receipt->deadline = deadline;
+            }
+            transfer->ready = 1;
+        }
+    }
+    if (transfer) {
+        if (transfer->ready) publish_receipts(transfer);
+        else transfer->active = 0;  /* Storage failed before any forwarding. */
     }
     log_event(error ? "FILE_FAILED" : "FILE_FORWARDED", fd,
               "user=%s target=%s file=%s bytes=%lu recipients=%d result=%s",
@@ -471,6 +733,9 @@ static void *serve_client(void *argument)
         if (strcmp(line, "QUIT") == 0) {
             send_text(fd, "OK BYE" TAG);
             finished = 1;
+        } else if (strcmp(line, "CAPS FILE_ACK") == 0) {
+            client->receipt_capable = 1;
+            send_text(fd, "OK CAPS FILE_ACK" TAG);
         } else if (strncmp(line, "REGISTER ", 9) == 0) {
             const char *name = line + 9;
             int taken = 0;
@@ -500,6 +765,8 @@ static void *serve_client(void *argument)
         } else if (client->name[0] == '\0') {
             send_text(fd, "ERR 005 REGISTER_REQUIRED" TAG);
 
+        } else if (!strncmp(line, "FILEACK ", 8) || !strcmp(line, "FILEACK")) {
+            handle_file_ack(client, line);
         } else if (handle_room_command(client, line)) {
             /* The room handler already sent the response. */
         } else if (strncmp(line, "BCAST ", 6) == 0) {
@@ -601,6 +868,7 @@ static void *serve_client(void *argument)
     for (int i = 0; i < MAX_ROOMS; ++i)
         remove_member(i, (int)(client - clients));
 
+    disconnect_receipts(client);
     log_event("DISCONNECT", fd, "user=%s memberships_cleared=1",
               client->name[0] ? client->name : "unregistered");
     close(fd);
@@ -612,6 +880,10 @@ static void *serve_client(void *argument)
 
 int main(void)
 {
+    struct timespec clock_check;
+    if (clock_gettime(CLOCK_MONOTONIC, &clock_check)) {
+        perror("monotonic clock"); return EXIT_FAILURE;
+    }
     FILE *check_log = fopen(LOG_PATH, "a");
     if (!check_log) { perror("open log"); return EXIT_FAILURE; }
     if (fclose(check_log)) { perror("close log"); return EXIT_FAILURE; }
@@ -650,6 +922,13 @@ int main(void)
         return EXIT_FAILURE;
     }
 
+    pthread_t timer;
+    int timer_error = pthread_create(&timer, NULL, receipt_timer, NULL);
+    if (timer_error) {
+        fprintf(stderr, "receipt timer: %s\n", strerror(timer_error));
+        close(listener); return EXIT_FAILURE;
+    }
+    pthread_detach(timer);
     log_event("START", listener, "student=IT23584990 port=%d", PORT);
     printf("NetMessenger - IT23584990\n");
     printf("Listening on 0.0.0.0:%d\n", PORT);
@@ -683,12 +962,14 @@ int main(void)
             }
         }
 
-        if (slot == NULL) {
+        if (slot == NULL || next_session == 0) {
             send_text(fd, "ERR 006 SERVER_FULL" TAG);
             close(fd);
         } else {
             slot->fd = fd;
             slot->name[0] = '\0';
+            slot->session = next_session++;
+            slot->receipt_capable = 0;
             pthread_t thread;
             int error = pthread_create(&thread, NULL,
                                        serve_client, slot);

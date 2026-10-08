@@ -10,12 +10,47 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #define PORT 10990
 #define LINE_SIZE 2048
 #define FILE_LIMIT (1024UL * 1024UL)
 
-typedef struct { int fd; int wake; int status; } Receiver;
+#define ACK_QUEUE_SIZE 128
+#define ACK_LINE_SIZE 80
+/* Main is the only socket writer. Receiver queues ACKs, never blocks on an
+   upload send mutex and never inserts an ACK into an outgoing binary payload. */
+typedef struct {
+    int fd, wake, status, finished;
+    pthread_mutex_t queue_lock;
+    char acks[ACK_QUEUE_SIZE][ACK_LINE_SIZE];
+    size_t head, count;
+} Receiver;
+
+static void wake_main(Receiver *state)
+{
+    char signal = 'x';
+    ssize_t n;
+    do { n = write(state->wake, &signal, 1); } while (n < 0 && errno == EINTR);
+    /* EAGAIN means the pipe already contains a wakeup; main will drain it. */
+}
+
+static int queue_ack(Receiver *state, unsigned long long id, int saved)
+{
+    pthread_mutex_lock(&state->queue_lock);
+    if (state->count == ACK_QUEUE_SIZE) {
+        pthread_mutex_unlock(&state->queue_lock);
+        fprintf(stderr, "File acknowledgement queue full; closing connection.\n");
+        return -1;
+    }
+    size_t tail = (state->head + state->count) % ACK_QUEUE_SIZE;
+    snprintf(state->acks[tail], ACK_LINE_SIZE, "FILEACK %llu %s\n",
+             id, saved ? "SAVED" : "SAVE_FAILED");
+    ++state->count;
+    pthread_mutex_unlock(&state->queue_lock);
+    wake_main(state);
+    return 0;
+}
 
 static int send_all(int fd, const void *buffer, size_t length)
 {
@@ -68,7 +103,19 @@ static void *receive_loop(void *argument)
     Receiver *state = argument;
     char line[LINE_SIZE + 256], username[32] = "";
     int bye = 0, result;
+    unsigned long long transfer_id = 0;
     while ((result = read_line(state->fd, line, sizeof(line))) == 1) {
+        if (!strncmp(line, "FILEID ", 7)) {
+            if (transfer_id || !line[7]) { result = -1; break; }
+            int valid = 1;
+            for (const char *p = line + 7; *p; ++p)
+                if (*p < '0' || *p > '9') valid = 0;
+            errno = 0;
+            transfer_id = strtoull(line + 7, NULL, 10);
+            if (!valid || errno || !transfer_id) { result = -1; break; }
+            continue;
+        }
+        if (transfer_id && strncmp(line, "FILE ", 5)) { result = -1; break; }
         if (!strncmp(line, "OK REGISTERED ", 14)) {
             char name[32];
             if (sscanf(line + 14, "%31s", name) == 1 && safe_component(name, 31))
@@ -117,25 +164,30 @@ static void *receive_loop(void *argument)
                 offset += (size_t)w;
             }
         }
+        if (out >= 0 && !left && !failed && fsync(out)) failed = 1;
         if (out >= 0 && close(out)) failed = 1;
         if (left || failed) {
             if (out >= 0) unlink(temporary);
             fprintf(stderr, "File receive failed: %s\n", filename);
         } else if (rename(temporary, path)) {
-            unlink(temporary); perror("save received file");
+            failed = 1; unlink(temporary); perror("save received file");
         } else printf("Received %lu bytes: %s\n", size, path);
         timeout.tv_sec = 0;
         if (setsockopt(state->fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout))) {
             result = -1; break;
         }
         if (left) break;
+        if (transfer_id && queue_ack(state, transfer_id, !failed)) { result = -1; break; }
+        transfer_id = 0;
     }
-    state->status = bye && result == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+    state->status = bye && result == 0 && !transfer_id ? EXIT_SUCCESS : EXIT_FAILURE;
     if (state->status) fprintf(stderr, "Server disconnected unexpectedly or sent an incomplete frame.\n");
     else puts("Server closed the connection.");
     shutdown(state->fd, SHUT_RDWR);
-    char done = 'x';
-    while (write(state->wake, &done, 1) < 0 && errno == EINTR) {}
+    pthread_mutex_lock(&state->queue_lock);
+    state->finished = 1;
+    pthread_mutex_unlock(&state->queue_lock);
+    wake_main(state);
     return NULL;
 }
 
@@ -195,7 +247,15 @@ int main(int argc, char *argv[])
     }
     int wake[2];
     if (pipe(wake)) { perror("pipe"); close(fd); return EXIT_FAILURE; }
-    Receiver state = {.fd = fd, .wake = wake[1], .status = EXIT_FAILURE};
+    for (int i = 0; i < 2; ++i) {
+        int flags = fcntl(wake[i], F_GETFL);
+        if (flags == -1 || fcntl(wake[i], F_SETFL, flags | O_NONBLOCK) == -1) {
+            perror("nonblocking wake pipe"); close(wake[0]); close(wake[1]); close(fd);
+            return EXIT_FAILURE;
+        }
+    }
+    Receiver state = {.fd = fd, .wake = wake[1], .status = EXIT_FAILURE,
+                      .queue_lock = PTHREAD_MUTEX_INITIALIZER};
     pthread_t thread;
     int error = pthread_create(&thread, NULL, receive_loop, &state);
     if (error) {
@@ -206,13 +266,41 @@ int main(int argc, char *argv[])
     puts("Commands: REGISTER LIST BCAST PMSG JOIN LEAVE ROOMS RMSG SENDFILE QUIT");
     puts("Upload: SENDFILE bob /tmp/sample.txt (room: SENDFILE #lab /tmp/sample.txt)");
     puts("Maximum file size: 1048576 bytes. Press Enter after each command.");
+    puts("File receipts: SAVED confirms recipient save; TIMEOUT means unconfirmed.");
     struct pollfd events[2] = {{STDIN_FILENO, POLLIN, 0}, {wake[0], POLLIN, 0}};
     char line[LINE_SIZE]; size_t used = 0; int dropping = 0, status = EXIT_SUCCESS;
-    for (;;) {
+    /* Negotiate before REGISTER; legacy servers can reject this optional command. */
+    if (submit(fd, "CAPS FILE_ACK")) {
+        perror("capability negotiation"); status = EXIT_FAILURE;
+        shutdown(fd, SHUT_RDWR);
+    }
+    int quitting = 0;
+    for (; status == EXIT_SUCCESS;) {
         int ready = poll(events, 2, -1);
         if (ready < 0 && errno == EINTR) continue;
         if (ready < 0) { perror("poll"); status = EXIT_FAILURE; break; }
-        if (events[1].revents) break;
+        if (events[1].revents) {
+            char signals[128];
+            while (read(wake[0], signals, sizeof(signals)) > 0) {}
+            int finished;
+            for (;;) {
+                char ack[ACK_LINE_SIZE];
+                pthread_mutex_lock(&state.queue_lock);
+                finished = state.finished;
+                int available = state.count > 0;
+                if (available) {
+                    strcpy(ack, state.acks[state.head]);
+                    state.head = (state.head + 1) % ACK_QUEUE_SIZE;
+                    --state.count;
+                }
+                pthread_mutex_unlock(&state.queue_lock);
+                if (finished || !available) break;
+                if (!quitting && send_all(fd, ack, strlen(ack))) {
+                    perror("send file acknowledgement"); status = EXIT_FAILURE; break;
+                }
+            }
+            if (finished || status != EXIT_SUCCESS) break;
+        }
         if (events[0].revents & (POLLIN | POLLHUP)) {
             char c;
             ssize_t n = read(STDIN_FILENO, &c, 1);
@@ -221,14 +309,14 @@ int main(int argc, char *argv[])
             if (!n) {
                 /* EOF requests graceful shutdown; discard an unfinished line. */
                 if (submit(fd, "QUIT")) { status = EXIT_FAILURE; break; }
-                events[0].fd = -1; continue;
+                quitting = 1; events[0].fd = -1; continue;
             }
             if (c == '\n') {
                 if (!dropping) {
                     if (used && line[used-1] == '\r') --used;
                     line[used] = '\0';
                     if (used && submit(fd, line)) { perror("send"); status = EXIT_FAILURE; break; }
-                    if (!strcmp(line, "QUIT")) events[0].fd = -1;
+                    if (!strcmp(line, "QUIT")) { quitting = 1; events[0].fd = -1; }
                 } else fprintf(stderr, "Command too long or contains NUL; discarded.\n");
                 used = 0; dropping = 0;
             } else if (!c || used >= sizeof(line)-1) dropping = 1;
@@ -238,5 +326,6 @@ int main(int argc, char *argv[])
     shutdown(fd, SHUT_RDWR);
     pthread_join(thread, NULL);
     close(wake[0]); close(wake[1]); close(fd);
+    pthread_mutex_destroy(&state.queue_lock);
     return status == EXIT_SUCCESS ? state.status : status;
 }
