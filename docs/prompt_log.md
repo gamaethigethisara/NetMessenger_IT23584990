@@ -1,5 +1,19 @@
 # AI Assistance Log - IT23584990
 
+## Overview of My Work and AI Assistance
+
+I set up the CentOS development environment, applied implementation
+changes, compiled and ran the C server and client, and managed Git
+commits and pushes. I performed messaging and file-transfer tests,
+compared files using cmp, checked disconnect behaviour, ran test
+scripts, and captured screenshots of the results.
+
+ChatGPT/Codex assisted with requirement explanations, code generation
+and revision, troubleshooting, test-script preparation, and
+documentation drafting. I checked the supplied changes through
+compilation and testing in my CentOS environment. The entries below
+describe the assistance and validation at each development stage.
+
 ## Entry 1 - Assignment and environment setup
 Tool: ChatGPT / Codex
 Request summary: Explain the assignment and provide step-by-step
@@ -83,3 +97,29 @@ updates and pushed them to GitHub.
 
 This entry and the registration entry are summaries of assistance,
 not verbatim transcripts of the original prompts and responses.
+
+## Entry 11 - File receipt acknowledgement
+Tool: ChatGPT / Codex
+
+Request summary (English paraphrase):
+Implement file receipt acknowledgements so the sender receives
+confirmation when a recipient successfully saves a transferred
+file, or a failure notification if saving is unsuccessful.
+
+Assistance received:
+Codex provided source-code updates, an automated test script and
+supporting documentation for this extension.
+
+My implementation and validation work:
+I integrated the updates into the project and compiled the server
+and client on CentOS. I ran the automated receipt test script,
+and all 16 test groups passed.
+
+I manually tested successful private delivery, a controlled
+recipient save failure, and a room transfer with mixed results.
+I compared the original file with the server and recipient copies
+using cmp, checked receipt events in the server log, and captured
+screenshots of the results.
+
+The verification results are recorded in
+docs/file_receipt_results.md.
