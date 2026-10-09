@@ -1,0 +1,200 @@
+[2026-10-07T09:02:46+0530] event=COMMAND fd=4 user=alice command=PMSG nobody Hello
+[2026-10-07T09:02:46+0530] event=SENT fd=4 ERR 002 USER_NOT_FOUND NID:5849\x0A
+[2026-10-07T09:20:07+0530] event=CONNECT fd=5 accepted=1
+[2026-10-07T09:20:16+0530] event=COMMAND fd=5 user=unregistered command=REGISTER bob
+[2026-10-07T09:20:16+0530] event=SENT fd=5 OK REGISTERED bob NID:5849\x0A
+[2026-10-07T09:20:16+0530] event=SENT fd=4 MSG INFO bob JOINED\x0A
+[2026-10-07T09:20:27+0530] event=COMMAND fd=4 user=alice command=SENDFILE bob sample_4990.txt 52
+[2026-10-07T09:20:28+0530] event=FILE_STORED fd=4 user=alice target=bob path=storage/IT23584990/alice/sample_4990.txt bytes=52
+[2026-10-07T09:20:28+0530] event=SENT fd=4 OK FILE_RECEIVED sample_4990.txt NID:5849\x0A
+[2026-10-07T09:20:28+0530] event=FILE_FORWARDED fd=4 user=alice target=bob file=sample_4990.txt bytes=52 recipients=1 result=OK
+[2026-10-07T09:20:42+0530] event=COMMAND fd=5 user=bob command=QUIT
+[2026-10-07T09:20:42+0530] event=SENT fd=5 OK BYE NID:5849\x0A
+[2026-10-07T09:20:42+0530] event=SENT fd=4 MSG INFO bob LEFT\x0A
+[2026-10-07T09:20:42+0530] event=DISCONNECT fd=5 user=bob memberships_cleared=1
+[2026-10-07T09:28:48+0530] event=START fd=3 student=IT23584990 port=10990
+[2026-10-07T09:28:53+0530] event=CONNECT fd=4 accepted=1
+[2026-10-07T09:29:45+0530] event=COMMAND fd=4 user=unregistered command=REGISTER alice
+[2026-10-07T09:29:45+0530] event=SENT fd=4 OK REGISTERED alice NID:5849\x0A
+[2026-10-07T09:29:56+0530] event=CONNECT fd=5 accepted=1
+[2026-10-07T09:30:06+0530] event=COMMAND fd=5 user=unregistered command=REGISTER bob
+[2026-10-07T09:30:06+0530] event=SENT fd=5 OK REGISTERED bob NID:5849\x0A
+[2026-10-07T09:30:06+0530] event=SENT fd=4 MSG INFO bob JOINED\x0A
+[2026-10-07T09:30:32+0530] event=CONNECT fd=6 accepted=1
+[2026-10-07T09:31:22+0530] event=COMMAND fd=6 user=unregistered command=REGISTER carol
+[2026-10-07T09:31:22+0530] event=SENT fd=6 OK REGISTERED carol NID:5849\x0A
+[2026-10-07T09:31:22+0530] event=SENT fd=4 MSG INFO carol JOINED\x0A
+[2026-10-07T09:31:22+0530] event=SENT fd=5 MSG INFO carol JOINED\x0A
+[2026-10-07T09:31:26+0530] event=CONNECT fd=7 accepted=1
+[2026-10-07T09:31:43+0530] event=COMMAND fd=7 user=unregistered command=REGISTER dave
+[2026-10-07T09:31:43+0530] event=SENT fd=7 OK REGISTERED dave NID:5849\x0A
+[2026-10-07T09:31:43+0530] event=SENT fd=4 MSG INFO dave JOINED\x0A
+[2026-10-07T09:31:43+0530] event=SENT fd=5 MSG INFO dave JOINED\x0A
+[2026-10-07T09:31:43+0530] event=SENT fd=6 MSG INFO dave JOINED\x0A
+[2026-10-07T09:31:47+0530] event=CONNECT fd=8 accepted=1
+[2026-10-07T09:32:00+0530] event=COMMAND fd=8 user=unregistered command=REGISTER erin
+[2026-10-07T09:32:00+0530] event=SENT fd=8 OK REGISTERED erin NID:5849\x0A
+[2026-10-07T09:32:00+0530] event=SENT fd=4 MSG INFO erin JOINED\x0A
+[2026-10-07T09:32:00+0530] event=SENT fd=5 MSG INFO erin JOINED\x0A
+[2026-10-07T09:32:00+0530] event=SENT fd=6 MSG INFO erin JOINED\x0A
+[2026-10-07T09:32:00+0530] event=SENT fd=7 MSG INFO erin JOINED\x0A
+[2026-10-07T09:32:34+0530] event=COMMAND fd=4 user=alice command=LIST
+[2026-10-07T09:32:34+0530] event=SENT fd=4 OK USERS alice,bob,carol,dave,erin NID:5849\x0A
+[2026-10-07T09:33:05+0530] event=COMMAND fd=4 user=alice command=BCAST Five-client test IT23584990
+[2026-10-07T09:33:05+0530] event=SENT fd=5 MSG BCAST alice Five-client test IT23584990\x0A
+[2026-10-07T09:33:05+0530] event=SENT fd=6 MSG BCAST alice Five-client test IT23584990\x0A
+[2026-10-07T09:33:05+0530] event=SENT fd=7 MSG BCAST alice Five-client test IT23584990\x0A
+[2026-10-07T09:33:05+0530] event=SENT fd=8 MSG BCAST alice Five-client test IT23584990\x0A
+[2026-10-07T09:33:05+0530] event=SENT fd=4 OK SENT NID:5849\x0A
+[2026-10-07T09:46:31+0530] event=COMMAND fd=4 user=alice command=JOIN binarylab
+[2026-10-07T09:46:31+0530] event=SENT fd=4 OK JOINED binarylab NID:5849\x0A
+[2026-10-07T09:46:39+0530] event=COMMAND fd=5 user=bob command=JOIN binarylab
+[2026-10-07T09:46:39+0530] event=SENT fd=5 OK JOINED binarylab NID:5849\x0A
+[2026-10-07T09:46:48+0530] event=COMMAND fd=6 user=carol command=JOIN binarylab
+[2026-10-07T09:46:48+0530] event=SENT fd=6 OK JOINED binarylab NID:5849\x0A
+[2026-10-07T09:47:02+0530] event=COMMAND fd=4 user=alice command=SENDFILE #binarylab room_binary_4990.bin 4096
+[2026-10-07T09:47:02+0530] event=FILE_STORED fd=4 user=alice target=#binarylab path=storage/IT23584990/alice/room_binary_4990.bin bytes=4096
+[2026-10-07T09:47:02+0530] event=SENT fd=4 OK FILE_RECEIVED room_binary_4990.bin NID:5849\x0A
+[2026-10-07T09:47:02+0530] event=FILE_FORWARDED fd=4 user=alice target=#binarylab file=room_binary_4990.bin bytes=4096 recipients=2 result=OK
+[2026-10-07T09:54:01+0530] event=SENT fd=4 MSG INFO carol LEFT\x0A
+[2026-10-07T09:54:01+0530] event=SENT fd=5 MSG INFO carol LEFT\x0A
+[2026-10-07T09:54:01+0530] event=SENT fd=7 MSG INFO carol LEFT\x0A
+[2026-10-07T09:54:01+0530] event=SENT fd=8 MSG INFO carol LEFT\x0A
+[2026-10-07T09:54:01+0530] event=DISCONNECT fd=6 user=carol memberships_cleared=1
+[2026-10-07T09:54:15+0530] event=COMMAND fd=4 user=alice command=LIST
+[2026-10-07T09:54:15+0530] event=SENT fd=4 OK USERS alice,bob,dave,erin NID:5849\x0A
+[2026-10-07T09:54:34+0530] event=CONNECT fd=9 accepted=1
+[2026-10-07T09:54:50+0530] event=COMMAND fd=9 user=unregistered command=REGISTER carol
+[2026-10-07T09:54:50+0530] event=SENT fd=9 OK REGISTERED carol NID:5849\x0A
+[2026-10-07T09:54:50+0530] event=SENT fd=4 MSG INFO carol JOINED\x0A
+[2026-10-07T09:54:50+0530] event=SENT fd=5 MSG INFO carol JOINED\x0A
+[2026-10-07T09:54:50+0530] event=SENT fd=7 MSG INFO carol JOINED\x0A
+[2026-10-07T09:54:50+0530] event=SENT fd=8 MSG INFO carol JOINED\x0A
+[2026-10-07T09:55:01+0530] event=COMMAND fd=9 user=carol command=RMSG binarylab Reconnect membership test
+[2026-10-07T09:55:01+0530] event=SENT fd=9 ERR 005 NOT_IN_ROOM NID:5849\x0A
+[2026-10-07T09:55:15+0530] event=COMMAND fd=9 user=carol command=JOIN binarylab
+[2026-10-07T09:55:15+0530] event=SENT fd=9 OK JOINED binarylab NID:5849\x0A
+[2026-10-07T09:55:35+0530] event=COMMAND fd=9 user=carol command=RMSG binarylab Carol rejoined successfully
+[2026-10-07T09:55:35+0530] event=SENT fd=4 MSG ROOM binarylab carol Carol rejoined successfully\x0A
+[2026-10-07T09:55:35+0530] event=SENT fd=5 MSG ROOM binarylab carol Carol rejoined successfully\x0A
+[2026-10-07T09:55:35+0530] event=SENT fd=9 OK SENT NID:5849\x0A
+[2026-10-07T10:21:57+0530] event=START fd=3 student=IT23584990 port=10990
+[2026-10-07T10:23:04+0530] event=CONNECT fd=4 accepted=1
+[2026-10-07T10:23:05+0530] event=COMMAND fd=4 user=unregistered command=REGISTER framinguser
+[2026-10-07T10:23:05+0530] event=SENT fd=4 OK REGISTERED framinguser NID:5849\x0A
+[2026-10-07T10:23:05+0530] event=COMMAND fd=4 user=framinguser command=LIST
+[2026-10-07T10:23:05+0530] event=SENT fd=4 OK USERS framinguser NID:5849\x0A
+[2026-10-07T10:23:05+0530] event=COMMAND fd=4 user=framinguser command=ROOMS
+[2026-10-07T10:23:05+0530] event=SENT fd=4 OK ROOMS  NID:5849\x0A
+[2026-10-07T10:23:05+0530] event=COMMAND fd=4 user=framinguser command=LIST
+[2026-10-07T10:23:05+0530] event=SENT fd=4 OK USERS framinguser NID:5849\x0A
+[2026-10-07T10:23:05+0530] event=COMMAND fd=4 user=framinguser command=ROOMS
+[2026-10-07T10:23:05+0530] event=SENT fd=4 OK ROOMS  NID:5849\x0A
+[2026-10-07T10:23:05+0530] event=COMMAND fd=4 user=framinguser command=QUIT
+[2026-10-07T10:23:05+0530] event=SENT fd=4 OK BYE NID:5849\x0A
+[2026-10-07T10:23:05+0530] event=DISCONNECT fd=4 user=framinguser memberships_cleared=1
+[2026-10-07T10:34:36+0530] event=CONNECT fd=5 accepted=1
+[2026-10-07T10:34:36+0530] event=COMMAND fd=5 user=unregistered command=REGISTER rx_c4ae2ad7
+[2026-10-07T10:34:36+0530] event=SENT fd=5 OK REGISTERED rx_c4ae2ad7 NID:5849\x0A
+[2026-10-07T10:34:36+0530] event=CONNECT fd=4 accepted=1
+[2026-10-07T10:34:36+0530] event=COMMAND fd=4 user=unregistered command=REGISTER tx_c4ae2ad7
+[2026-10-07T10:34:36+0530] event=SENT fd=4 OK REGISTERED tx_c4ae2ad7 NID:5849\x0A
+[2026-10-07T10:34:36+0530] event=SENT fd=5 MSG INFO tx_c4ae2ad7 JOINED\x0A
+[2026-10-07T10:34:36+0530] event=COMMAND fd=4 user=tx_c4ae2ad7 command=SENDFILE rx_c4ae2ad7 framing.bin 1036
+[2026-10-07T10:34:36+0530] event=FILE_STORED fd=4 user=tx_c4ae2ad7 target=rx_c4ae2ad7 path=storage/IT23584990/tx_c4ae2ad7/framing.bin bytes=1036
+[2026-10-07T10:34:36+0530] event=SENT fd=4 OK FILE_RECEIVED framing.bin NID:5849\x0A
+[2026-10-07T10:34:36+0530] event=FILE_FORWARDED fd=4 user=tx_c4ae2ad7 target=rx_c4ae2ad7 file=framing.bin bytes=1036 recipients=1 result=OK
+[2026-10-07T10:34:36+0530] event=COMMAND fd=4 user=tx_c4ae2ad7 command=LIST
+[2026-10-07T10:34:36+0530] event=SENT fd=4 OK USERS rx_c4ae2ad7,tx_c4ae2ad7 NID:5849\x0A
+[2026-10-07T10:34:36+0530] event=COMMAND fd=4 user=tx_c4ae2ad7 command=SENDFILE #missing_c4ae2ad7 rejected.bin 5
+[2026-10-07T10:34:36+0530] event=FILE_FAILED fd=4 user=tx_c4ae2ad7 target=#missing_c4ae2ad7 file=rejected.bin bytes=5 recipients=0 result=ERR 003 ROOM_NOT_FOUND NID:5849\x0A
+[2026-10-07T10:34:36+0530] event=SENT fd=4 ERR 003 ROOM_NOT_FOUND NID:5849\x0A
+[2026-10-07T10:34:36+0530] event=COMMAND fd=4 user=tx_c4ae2ad7 command=LIST
+[2026-10-07T10:34:36+0530] event=SENT fd=4 OK USERS rx_c4ae2ad7,tx_c4ae2ad7 NID:5849\x0A
+[2026-10-07T10:34:36+0530] event=COMMAND fd=4 user=tx_c4ae2ad7 command=QUIT
+[2026-10-07T10:34:36+0530] event=SENT fd=4 OK BYE NID:5849\x0A
+[2026-10-07T10:34:36+0530] event=SENT fd=5 MSG INFO tx_c4ae2ad7 LEFT\x0A
+[2026-10-07T10:34:36+0530] event=DISCONNECT fd=4 user=tx_c4ae2ad7 memberships_cleared=1
+[2026-10-07T10:34:36+0530] event=COMMAND fd=5 user=rx_c4ae2ad7 command=QUIT
+[2026-10-07T10:34:36+0530] event=SENT fd=5 OK BYE NID:5849\x0A
+[2026-10-07T10:34:36+0530] event=DISCONNECT fd=5 user=rx_c4ae2ad7 memberships_cleared=1
+[2026-10-07T10:42:02+0530] event=CONNECT fd=6 accepted=1
+[2026-10-07T10:42:02+0530] event=COMMAND fd=6 user=unregistered command=REGISTER large_f2f1c0b8
+[2026-10-07T10:42:02+0530] event=SENT fd=6 OK REGISTERED large_f2f1c0b8 NID:5849\x0A
+[2026-10-07T10:42:02+0530] event=COMMAND fd=6 user=large_f2f1c0b8 command=SENDFILE nobody large.bin 1048577
+[2026-10-07T10:42:02+0530] event=SENT fd=6 ERR 004 FILE_TOO_LARGE NID:5849\x0A
+[2026-10-07T10:42:02+0530] event=DISCONNECT fd=6 user=large_f2f1c0b8 memberships_cleared=1
+[2026-10-07T10:42:02+0530] event=CONNECT fd=4 accepted=1
+[2026-10-07T10:42:02+0530] event=COMMAND fd=4 user=unregistered command=REGISTER partial_f2f1c0b8
+[2026-10-07T10:42:02+0530] event=SENT fd=4 OK REGISTERED partial_f2f1c0b8 NID:5849\x0A
+[2026-10-07T10:42:02+0530] event=COMMAND fd=4 user=partial_f2f1c0b8 command=SENDFILE nobody partial.bin 100
+[2026-10-07T10:42:02+0530] event=UPLOAD_INCOMPLETE fd=4 user=partial_f2f1c0b8 file=partial.bin received=3 expected=100 errno=0
+[2026-10-07T10:42:02+0530] event=DISCONNECT fd=4 user=partial_f2f1c0b8 memberships_cleared=1
+[2026-10-07T10:42:02+0530] event=CONNECT fd=5 accepted=1
+[2026-10-07T10:42:02+0530] event=COMMAND fd=5 user=unregistered command=REGISTER health_f2f1c0b8
+[2026-10-07T10:42:02+0530] event=SENT fd=5 OK REGISTERED health_f2f1c0b8 NID:5849\x0A
+[2026-10-07T10:42:02+0530] event=COMMAND fd=5 user=health_f2f1c0b8 command=LIST
+[2026-10-07T10:42:02+0530] event=SENT fd=5 OK USERS health_f2f1c0b8 NID:5849\x0A
+[2026-10-07T10:42:02+0530] event=COMMAND fd=5 user=health_f2f1c0b8 command=QUIT
+[2026-10-07T10:42:02+0530] event=SENT fd=5 OK BYE NID:5849\x0A
+[2026-10-07T10:42:02+0530] event=DISCONNECT fd=5 user=health_f2f1c0b8 memberships_cleared=1
+[2026-10-09T04:37:52+0530] event=START fd=3 student=IT23584990 port=10990
+[2026-10-09T04:38:04+0530] event=CONNECT fd=4 accepted=1
+[2026-10-09T04:38:04+0530] event=COMMAND fd=4 user=unregistered command=CAPS FILE_ACK
+[2026-10-09T04:38:04+0530] event=SENT fd=4 OK CAPS FILE_ACK NID:5849\x0A
+[2026-10-09T04:38:13+0530] event=COMMAND fd=4 user=unregistered command=REGISTER alice
+[2026-10-09T04:38:13+0530] event=SENT fd=4 OK REGISTERED alice NID:5849\x0A
+[2026-10-09T04:38:22+0530] event=CONNECT fd=5 accepted=1
+[2026-10-09T04:38:22+0530] event=COMMAND fd=5 user=unregistered command=CAPS FILE_ACK
+[2026-10-09T04:38:22+0530] event=SENT fd=5 OK CAPS FILE_ACK NID:5849\x0A
+[2026-10-09T04:38:27+0530] event=COMMAND fd=5 user=unregistered command=REGISTER bob
+[2026-10-09T04:38:27+0530] event=SENT fd=5 OK REGISTERED bob NID:5849\x0A
+[2026-10-09T04:38:27+0530] event=SENT fd=4 MSG INFO bob JOINED\x0A
+[2026-10-09T04:38:38+0530] event=COMMAND fd=4 user=alice command=SENDFILE bob receipt_demo.txt 31
+[2026-10-09T04:38:38+0530] event=FILE_STORED fd=4 user=alice target=bob path=storage/IT23584990/alice/receipt_demo.txt bytes=31
+[2026-10-09T04:38:38+0530] event=SENT fd=4 OK FILE_TRANSFER 1 receipt_demo.txt recipients=1 NID:5849\x0A
+[2026-10-09T04:38:38+0530] event=SENT fd=4 OK FILE_RECEIVED receipt_demo.txt NID:5849\x0A
+[2026-10-09T04:38:38+0530] event=FILE_FORWARDED fd=4 user=alice target=bob file=receipt_demo.txt bytes=31 recipients=1 result=OK
+[2026-10-09T04:38:38+0530] event=COMMAND fd=5 user=bob command=FILEACK 1 SAVED
+[2026-10-09T04:38:38+0530] event=SENT fd=4 MSG FILE_RECEIPT 1 bob SAVED NID:5849\x0A
+[2026-10-09T04:38:38+0530] event=FILE_RECEIPT fd=4 id=1 sender=alice recipient=bob status=SAVED
+[2026-10-09T04:38:38+0530] event=SENT fd=4 MSG FILE_COMPLETE 1 saved=1 failed=0 unknown=0 NID:5849\x0A
+[2026-10-09T04:38:38+0530] event=FILE_COMPLETE fd=4 id=1 saved=1 failed=0 unknown=0
+[2026-10-09T04:45:07+0530] event=CONNECT fd=6 accepted=1
+[2026-10-09T04:45:07+0530] event=COMMAND fd=6 user=unregistered command=CAPS FILE_ACK
+[2026-10-09T04:45:07+0530] event=SENT fd=6 OK CAPS FILE_ACK NID:5849\x0A
+[2026-10-09T04:48:13+0530] event=COMMAND fd=6 user=unregistered command=REGISTER failuser
+[2026-10-09T04:48:13+0530] event=SENT fd=6 OK REGISTERED failuser NID:5849\x0A
+[2026-10-09T04:48:13+0530] event=SENT fd=4 MSG INFO failuser JOINED\x0A
+[2026-10-09T04:48:13+0530] event=SENT fd=5 MSG INFO failuser JOINED\x0A
+[2026-10-09T04:48:26+0530] event=COMMAND fd=4 user=alice command=SENDFILE failuser receipt_demo.txt 31
+[2026-10-09T04:48:26+0530] event=FILE_STORED fd=4 user=alice target=failuser path=storage/IT23584990/alice/receipt_demo.txt bytes=31
+[2026-10-09T04:48:26+0530] event=SENT fd=4 OK FILE_TRANSFER 2 receipt_demo.txt recipients=1 NID:5849\x0A
+[2026-10-09T04:48:26+0530] event=SENT fd=4 OK FILE_RECEIVED receipt_demo.txt NID:5849\x0A
+[2026-10-09T04:48:26+0530] event=FILE_FORWARDED fd=4 user=alice target=failuser file=receipt_demo.txt bytes=31 recipients=1 result=OK
+[2026-10-09T04:48:26+0530] event=COMMAND fd=6 user=failuser command=FILEACK 2 SAVE_FAILED
+[2026-10-09T04:48:26+0530] event=SENT fd=4 MSG FILE_RECEIPT 2 failuser SAVE_FAILED NID:5849\x0A
+[2026-10-09T04:48:26+0530] event=FILE_RECEIPT fd=4 id=2 sender=alice recipient=failuser status=SAVE_FAILED
+[2026-10-09T04:48:26+0530] event=SENT fd=4 MSG FILE_COMPLETE 2 saved=0 failed=1 unknown=0 NID:5849\x0A
+[2026-10-09T04:48:26+0530] event=FILE_COMPLETE fd=4 id=2 saved=0 failed=1 unknown=0
+[2026-10-09T04:48:51+0530] event=COMMAND fd=6 user=failuser command=LIST
+[2026-10-09T04:48:51+0530] event=SENT fd=6 OK USERS alice,bob,failuser NID:5849\x0A
+[2026-10-09T04:55:30+0530] event=COMMAND fd=4 user=alice command=JOIN receiptlab
+[2026-10-09T04:55:30+0530] event=SENT fd=4 OK JOINED receiptlab NID:5849\x0A
+[2026-10-09T04:55:34+0530] event=COMMAND fd=5 user=bob command=JOIN receiptlab
+[2026-10-09T04:55:34+0530] event=SENT fd=5 OK JOINED receiptlab NID:5849\x0A
+[2026-10-09T04:55:41+0530] event=COMMAND fd=6 user=failuser command=JOIN receiptlab
+[2026-10-09T04:55:41+0530] event=SENT fd=6 OK JOINED receiptlab NID:5849\x0A
+[2026-10-09T04:55:53+0530] event=COMMAND fd=4 user=alice command=SENDFILE #receiptlab receipt_demo.txt 31
+[2026-10-09T04:55:54+0530] event=FILE_STORED fd=4 user=alice target=#receiptlab path=storage/IT23584990/alice/receipt_demo.txt bytes=31
+[2026-10-09T04:55:54+0530] event=SENT fd=4 OK FILE_TRANSFER 3 receipt_demo.txt recipients=2 NID:5849\x0A
+[2026-10-09T04:55:54+0530] event=SENT fd=4 OK FILE_RECEIVED receipt_demo.txt NID:5849\x0A
+[2026-10-09T04:55:54+0530] event=FILE_FORWARDED fd=4 user=alice target=#receiptlab file=receipt_demo.txt bytes=31 recipients=2 result=OK
+[2026-10-09T04:55:54+0530] event=COMMAND fd=6 user=failuser command=FILEACK 3 SAVE_FAILED
+[2026-10-09T04:55:54+0530] event=SENT fd=4 MSG FILE_RECEIPT 3 failuser SAVE_FAILED NID:5849\x0A
+[2026-10-09T04:55:54+0530] event=FILE_RECEIPT fd=4 id=3 sender=alice recipient=failuser status=SAVE_FAILED
+[2026-10-09T04:55:54+0530] event=COMMAND fd=5 user=bob command=FILEACK 3 SAVED
+[2026-10-09T04:55:54+0530] event=SENT fd=4 MSG FILE_RECEIPT 3 bob SAVED NID:5849\x0A
+[2026-10-09T04:55:54+0530] event=FILE_RECEIPT fd=4 id=3 sender=alice recipient=bob status=SAVED
+[2026-10-09T04:55:54+0530] event=SENT fd=4 MSG FILE_COMPLETE 3 saved=1 failed=1 unknown=0 NID:5849\x0A
+[2026-10-09T04:55:54+0530] event=FILE_COMPLETE fd=4 id=3 saved=1 failed=1 unknown=0
